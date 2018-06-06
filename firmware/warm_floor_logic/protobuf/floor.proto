@@ -1,0 +1,21 @@
+/* 
+	~/Downloads/nanopb-0.3.9-macosx-x86/generator-bin/protoc --nanopb_out=. floor.proto
+*/
+
+syntax = "proto2";
+
+message TempSet {
+    required int32 zone_1 = 1;
+    required int32 zone_2 = 2;
+    required int32 zone_3 = 3;
+    required int32 zone_4 = 4;
+    required int32 zone_5 = 5;
+    required int32 zone_6 = 6;
+}
+
+message State {
+    required int32 temp1 = 1;
+    required int32 temp2 = 2;
+    required TempSet tempSet = 3;
+    required TempSet tempActual = 4;
+}
