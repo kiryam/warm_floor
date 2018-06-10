@@ -38,7 +38,7 @@ Core core;
 #define MAX_TEMP 80
 #define MAX_INSIDE_TEMP 80
 #define FAN_ON_TEMP 50
-#define MAX_ZONES_AT_THE_MOMENT 4
+#define MAX_ZONES_AT_THE_MOMENT 5
 
 #define RADION_MAX_PACKETS_IN_MESSAGE 10
 #define RADIO_BUFFER_SIZE RADION_MAX_PACKETS_IN_MESSAGE*NRF_PAYLOAD_LENGTH
@@ -81,7 +81,7 @@ void Led1_Init(LED_dev* led){
 void Switch1_Init(Switch_dev* swtch){
 	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
 	swtch->Switch_GPIOx = GPIOB;
-	swtch->Switch_PIN = GPIO_Pin_8;
+	swtch->Switch_PIN = GPIO_Pin_11;
 	swtch->start_on = false;
 	Switch_Init(swtch);
 }
@@ -89,7 +89,7 @@ void Switch1_Init(Switch_dev* swtch){
 void Switch2_Init(Switch_dev* swtch){
 	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
 	swtch->Switch_GPIOx = GPIOB;
-	swtch->Switch_PIN = GPIO_Pin_9;
+	swtch->Switch_PIN = GPIO_Pin_12;
 	swtch->start_on = false;
 	Switch_Init(swtch);
 }
@@ -97,7 +97,7 @@ void Switch2_Init(Switch_dev* swtch){
 void Switch3_Init(Switch_dev* swtch){
 	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
 	swtch->Switch_GPIOx = GPIOB;
-	swtch->Switch_PIN = GPIO_Pin_10;
+	swtch->Switch_PIN = GPIO_Pin_13;
 	swtch->start_on = false;
 	Switch_Init(swtch);
 }
@@ -105,7 +105,7 @@ void Switch3_Init(Switch_dev* swtch){
 void Switch4_Init(Switch_dev* swtch){
 	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
 	swtch->Switch_GPIOx = GPIOB;
-	swtch->Switch_PIN = GPIO_Pin_11;
+	swtch->Switch_PIN = GPIO_Pin_8;
 	swtch->start_on = false;
 	Switch_Init(swtch);
 }
@@ -113,7 +113,7 @@ void Switch4_Init(Switch_dev* swtch){
 void Switch5_Init(Switch_dev* swtch){
 	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
 	swtch->Switch_GPIOx = GPIOB;
-	swtch->Switch_PIN = GPIO_Pin_12;
+	swtch->Switch_PIN = GPIO_Pin_9;
 	swtch->start_on = false;
 	Switch_Init(swtch);
 }
@@ -121,7 +121,7 @@ void Switch5_Init(Switch_dev* swtch){
 void Switch6_Init(Switch_dev* swtch){
 	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
 	swtch->Switch_GPIOx = GPIOB;
-	swtch->Switch_PIN = GPIO_Pin_13;
+	swtch->Switch_PIN = GPIO_Pin_10;
 	swtch->start_on = false;
 	Switch_Init(swtch);
 }
@@ -203,7 +203,7 @@ int main(int argc, char* argv[]) {
 	IWDG_Enable();
 #endif
 	Led1_Init(&core.led1);
-	Fan1_On();
+	 Fan1_On();
 
 	DS18B20_Init();
 	ds18b20_start_convert();
@@ -385,6 +385,7 @@ void SwitchStateTask(void const * argument){
 
 		if(core.tempSet.zone_1 > core.tempActual.zone_1 && core.tempActual.zone_1 > MIN_TEMP && can_heat && zones_on < MAX_ZONES_AT_THE_MOMENT ) {
 			Switch_On(&core.switches[0]);
+			zones_on++;
 		}else {
 			Switch_Off(&core.switches[0]);
 		}
@@ -392,7 +393,7 @@ void SwitchStateTask(void const * argument){
 		if(core.tempSet.zone_2 > core.tempActual.zone_2 && core.tempActual.zone_2 > MIN_TEMP && can_heat && zones_on < MAX_ZONES_AT_THE_MOMENT ) {
 			Switch_On(&core.switches[1]);
 			zones_on++;
-			LED_On(&core.led1);
+			//LED_On(&core.led1);
 		}else {
 			Switch_Off(&core.switches[1]);
 		}
