@@ -9,7 +9,7 @@
 
 
 #define B 3950 // B-коэффициент
-#define SERIAL_R 10200 // сопротивление последовательного резистора, 10 кОм
+#define SERIAL_R 9000 // сопротивление последовательного резистора, 10 кОм
 #define THERMISTOR_R 100000 // номинальное сопротивления термистора, 100 кОм
 #define NOMINAL_T 25 // номинальная температура (при которой TR = 100 кОм)
 
@@ -103,9 +103,10 @@ uint16_t get_avg_from_buff(Thermometer* therm, uint8_t termid){
 #define VDD_APPLI ((uint32_t) (3000))
 #define AVG_SLOPE ((uint32_t) (5336))
 
+static int32_t sensorValue;
 
 uint16_t get_internal_temp(Thermometer* therm){
-	int32_t sensorValue = therm->adc_buffer[5];
+	sensorValue = therm->adc_buffer[5];
 	//int32_t temperature = ((therm->adc_buffer[5] * VDD_APPLI / VDD_CALIB) - (int32_t) *TEMP30_CAL_ADDR ) ;
 	////temperature = temperature * (int32_t)(110 - 30);
 	//temperature = temperature / (int32_t)(*TEMP110_CAL_ADDR - *TEMP30_CAL_ADDR);

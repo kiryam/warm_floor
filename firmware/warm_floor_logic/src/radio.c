@@ -48,6 +48,7 @@ int Radio_Send(Radio* radio, uint8_t* data, size_t size) {
 		}
 
 		if (NRF_SendPacket(radio->instance, packet) != NRF_OK ) {
+			//LED_On(&core.led1);
 			return 1;
 		}
 
@@ -55,6 +56,7 @@ int Radio_Send(Radio* radio, uint8_t* data, size_t size) {
 		while(radio->instance->BUSY_FLAG == 1){
 			if(--retry_count == 0){
 				// reset NRF?
+				LED_On(&core.led1);
 				return 1;
 			}
 			osDelay(10);

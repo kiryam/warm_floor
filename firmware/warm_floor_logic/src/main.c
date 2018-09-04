@@ -30,9 +30,17 @@
 Core core;
 
 #define WATCHDOG_ENABLED
+#define INTERNAL_TEMP_SENSOR
+//#define SERIAL_DEBUG
 
-#define FAN_GPIO GPIOA
-#define FAN_PIN GPIO_Pin_10
+#ifdef SERIAL_DEBUG
+#ifdef INTERNAL_TEMP_SENSOR
+# error "INTERNAL_TEMP_SENSOR must be undefined if SERIAL_DEBUG was enabled"
+#endif
+#endif
+
+#define FAN_GPIO GPIOB
+#define FAN_PIN GPIO_Pin_4
 
 #define MIN_TEMP -30
 #define MAX_TEMP 80
@@ -163,7 +171,7 @@ void Fan1_Off(){
 }
 
 void Fan1_Init(){
-	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA, ENABLE);
+	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
 	GPIO_InitTypeDef GPIO_InitStructure;
 	GPIO_StructInit(&GPIO_InitStructure);
 	GPIO_InitStructure.GPIO_Pin = FAN_PIN;
@@ -195,16 +203,10 @@ int main(int argc, char* argv[]) {
 	Switch5_Init(&core.switches[4]);
 	Switch6_Init(&core.switches[5]);
 
-#ifdef WATCHDOG_ENABLED
-	IWDG_WriteAccessCmd(IWDG_WriteAccess_Enable);
-	IWDG_SetPrescaler(IWDG_Prescaler_256); // 4, 8, 16 ... 256
-	IWDG_SetReload(0x0FFF);//This parameter must be a number between 0 and 0x0FFF.
-	IWDG_ReloadCounter();
-	IWDG_Enable();
-#endif
 	Led1_Init(&core.led1);
-	 Fan1_On();
+	Fan1_On();
 
+#ifdef INTERNAL_TEMP_SENSOR
 	DS18B20_Init();
 	ds18b20_start_convert();
 
@@ -217,21 +219,24 @@ int main(int argc, char* argv[]) {
 		LED_Off(&core.led1);
 		delay_nms(500);
 	}
+#endif
+
 
 #ifdef WATCHDOG_ENABLED
 	IWDG_WriteAccessCmd(IWDG_WriteAccess_Enable);
-	IWDG_SetPrescaler(IWDG_Prescaler_16);
+	IWDG_SetPrescaler(IWDG_Prescaler_256);
 	IWDG_SetReload(0x0FFF);//This parameter must be a number between 0 and 0x0FFF.
 	IWDG_ReloadCounter();
 	IWDG_Enable();
 #endif
 
-	Fan1_Init();
 
-	//USART_HandleTypeDef usart_usart;
-	//core.usart1.usart = &usart_usart;
-	//Serial1_Init(&core.usart1);
-	//Serial_Send_Str(&core.usart1, "Initializing\r\n");
+#ifdef SERIAL_DEBUG
+	USART_HandleTypeDef usart_usart;
+	core.usart1.usart = &usart_usart;
+	Serial1_Init(&core.usart1);
+	Serial_Send_Str(&core.usart1, "Initializing\r\n");
+#endif
 
 #ifdef DISPLAY
 	Display1_Init(&core.display);
@@ -239,23 +244,37 @@ int main(int argc, char* argv[]) {
 #endif
 
 	Radio_Init(&core.radio1);
-	//Serial_Send_Str(&core.usart1, "Radio init ok\r\n");
+
+#ifdef SERIAL_DEBUG
+	Serial_Send_Str(&core.usart1, "Radio init ok\r\n");
+#endif
 
 	Thermometer_Init(&core.thermometers);
-	//Serial_Send_Str(&core.usart1, "Thermometer init ok\r\n");
+#ifdef SERIAL_DEBUG
+	Serial_Send_Str(&core.usart1, "Thermometer init ok\r\n");
+#endif
 
-	//LED_Off(&core.led1);
-
-	//Serial_Send_Str(&core.usart1, "DS18B20 init ok\r\n");
 
 	core.radio_queue = xQueueCreate(32, sizeof(uint8_t));
+
+#ifdef SERIAL_DEBUG
+	Serial_Send_Str(&core.usart1, "Radio queue initialized\r\n");
+#endif
 
 #if configUSE_TIMERS == 1
 	fanTimer = xTimerCreate( "fanTimer", 5000/portTICK_RATE_MS, pdFALSE, ( void * )0, fanTimerCallback );
 	xTimerStart( fanTimer, 0 );
 #endif
-	osThreadDef(switchStateTask, SwitchStateTask, osPriorityHigh, 0, configMINIMAL_STACK_SIZE);
-	osThreadCreate(osThread(switchStateTask), NULL);
+
+	osThreadId thread;
+	osThreadDef(switchStateTask, SwitchStateTask, osPriorityHigh, 0, 512);
+	thread = osThreadCreate(osThread(switchStateTask), NULL);
+
+	if(thread == NULL){
+#ifdef SERIAL_DEBUG
+	Serial_Send_Str(&core.usart1, "Failed to create switchStateTask\r\n");
+#endif
+	}
 
 	osThreadDef(messageReadTask, MessageReadTask, osPriorityNormal, 0, configMINIMAL_STACK_SIZE);
 	osThreadCreate(osThread(messageReadTask), NULL);
@@ -264,12 +283,23 @@ int main(int argc, char* argv[]) {
 	osThreadCreate(osThread(sendStateTask), NULL);
 
 
+#ifdef SERIAL_DEBUG
+	Serial_Send_Str(&core.usart1, "Tasks created\r\n");
+#endif
+
+
+
 #ifdef DISPLAY
 	osThreadDef(displayRenderTask, DisplayRenderTask, osPriorityLow, 0, configMINIMAL_STACK_SIZE);
 	osThreadCreate(osThread(displayRenderTask), NULL);
 #endif
 
 	osKernelStart();
+
+#ifdef SERIAL_DEBUG
+	Serial_Send_Str(&core.usart1, "Kernel start done\r\n");
+#endif
+
 	while (1) {
 	}
 }
@@ -282,11 +312,18 @@ static void fanTimerCallback( TimerHandle_t xExpiredTimer ) {
 #endif
 
 void MessageReadTask(void const * argument){
+#ifdef SERIAL_DEBUG
+	Serial_Send_Str(&core.usart1, "MessageReadTask started\r\n");
+#endif
+
 	uint32_t buffer_pos = 0;
 	uint32_t length=0;
 	uint8_t data=0;
 	for(;;){
 		if( xQueueReceive( (xQueueHandle)core.radio_queue, &( data ), ( TickType_t ) 100 ) ) {
+			#ifdef SERIAL_DEBUG
+				Serial_Send_Str(&core.usart1, "Reading message from radio_queue\r\n");
+			#endif
 			if( buffer_pos >= RADIO_BUFFER_SIZE ) {
 				buffer_pos=0;
 				length = 0;
@@ -337,19 +374,27 @@ void DisplayRenderTask(void const * argument){
 
 
 void SwitchStateTask(void const * argument){
+#ifdef SERIAL_DEBUG
+	Serial_Send_Str(&core.usart1, "SwitchStateTask started\r\n");
+#endif
 	for(;;) {
 
-		core.tempActual.zone_1 = -273;
+		#ifdef SERIAL_DEBUG
+			Serial_Send_Str(&core.usart1, "SwitchStateTask\r\n");
+		#endif
+
+		core.tempActual.zone_1 = Thermometer_GetValue(&core.thermometers, 0);
 		core.tempActual.zone_2 = Thermometer_GetValue(&core.thermometers, 1);
 		core.tempActual.zone_3 = Thermometer_GetValue(&core.thermometers, 2);
 		core.tempActual.zone_4 = Thermometer_GetValue(&core.thermometers, 3);
 		core.tempActual.zone_5 = Thermometer_GetValue(&core.thermometers, 4);
 		core.tempActual.zone_6 = Thermometer_GetValue(&core.thermometers, 5);
 
+#ifdef INTERNAL_TEMP_SENSOR
 		core.temp1 = (int32_t)ds18b20_get_temp(0);
 		core.temp2 = (int32_t)ds18b20_get_temp(1);
 		ds18b20_start_convert();
-
+#endif
 		//core.tempSet.temp = get_internal_temp(&core.thermometers);
 
 		if( core.temp1 > MAX_INSIDE_TEMP || core.temp2 > MAX_INSIDE_TEMP || core.tempActual.zone_2 > MAX_TEMP || core.tempActual.zone_3 > MAX_TEMP
@@ -357,12 +402,16 @@ void SwitchStateTask(void const * argument){
 			NVIC_SystemReset();
 		}
 
+#ifdef INTERNAL_TEMP_SENSOR
 		bool can_heat = false;
 		if ( (core.temp1 > -40 && core.temp1 < 60) &&
 		     (core.temp2 > -40 && core.temp2 < 60)
 				&& abs(core.temp1 - core.temp2) < 20 ) { // check inside temp
 			can_heat = true;
 		}
+#else
+		bool can_heat = true;
+#endif
 
 		if( core.temp1 >= FAN_ON_TEMP || core.temp2 >= FAN_ON_TEMP ) {
 #if configUSE_TIMERS == 1
@@ -393,7 +442,6 @@ void SwitchStateTask(void const * argument){
 		if(core.tempSet.zone_2 > core.tempActual.zone_2 && core.tempActual.zone_2 > MIN_TEMP && can_heat && zones_on < MAX_ZONES_AT_THE_MOMENT ) {
 			Switch_On(&core.switches[1]);
 			zones_on++;
-			//LED_On(&core.led1);
 		}else {
 			Switch_Off(&core.switches[1]);
 		}
@@ -434,7 +482,14 @@ void SwitchStateTask(void const * argument){
 }
 
 void SendStateTask(void const * argument){
+#ifdef SERIAL_DEBUG
+	Serial_Send_Str(&core.usart1, "SendStateTask started\r\n");
+#endif
 	for(;;){
+		#ifdef SERIAL_DEBUG
+			Serial_Send_Str(&core.usart1, "SendStateTask\r\n");
+		#endif
+
 		State state = State_init_zero;
 		state.temp1 = core.temp1;
 		state.temp2 = core.temp2;
@@ -444,6 +499,11 @@ void SendStateTask(void const * argument){
 		pb_ostream_t stream = pb_ostream_from_buffer(pb_buffer, sizeof(pb_buffer));
 		pb_encode(&stream, State_fields, &state);
 		Radio_Send(&core.radio1, pb_buffer, stream.bytes_written);
+		LED_Off(&core.led1);
+
+		#ifdef SERIAL_DEBUG
+			Serial_Send_Str(&core.usart1, "DONE SendStateTask\r\n");
+		#endif
 		osDelay(2000);
 	}
 }
@@ -454,6 +514,9 @@ void SendStateTask(void const * argument){
   * @retval None
   */
 void _Error_Handler(char * file, int line){
+#ifdef SERIAL_DEBUG
+	Serial_Send_Str(&core.usart1, "_Error_Handler\r\n");
+#endif
   while(1){}
 }
 

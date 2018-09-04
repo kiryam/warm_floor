@@ -85,12 +85,14 @@ nrf24l01_dev* NRF1_Init(uint8_t* addr_master,uint8_t* addr_slave, NRF_ADDR_WIDTH
 	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
 	RCC_APB2PeriphClockCmd(RCC_APB2Periph_SPI1, ENABLE);
 
+	GPIO_PinRemapConfig(GPIO_Remap_SWJ_JTAGDisable, ENABLE);
+	GPIO_PinRemapConfig(RCC_APB2Periph_SPI1, DISABLE);
 
 	NRF24L01_1.RX_BUFFER = RX_BUFFER1;
 	NRF24L01_1.on_event = on_event;
 
 	NRF24L01_1.NRF_CE_GPIOx  = GPIOB;
-	NRF24L01_1.NRF_CE_PIN = GPIO_Pin_0;
+	NRF24L01_1.NRF_CE_PIN = GPIO_Pin_3; //GPIO_Pin_0;
 
 	NRF24L01_1.NRF_CSN_GPIOx = GPIOB;
 	NRF24L01_1.NRF_CSN_PIN = GPIO_Pin_1;
@@ -126,7 +128,7 @@ nrf24l01_dev* NRF1_Init(uint8_t* addr_master,uint8_t* addr_slave, NRF_ADDR_WIDTH
 
 	GPIO_InitTypeDef GPIO_InitStructure3;
 	GPIO_StructInit(&GPIO_InitStructure3);
-	GPIO_InitStructure3.GPIO_Mode = GPIO_Mode_IN_FLOATING;
+	GPIO_InitStructure3.GPIO_Mode = GPIO_Mode_IPD;
 	GPIO_InitStructure3.GPIO_Pin = NRF24L01_1.NRF_IRQ_PIN;
 	GPIO_InitStructure3.GPIO_Speed = GPIO_Speed_50MHz;
 	GPIO_Init(NRF24L01_1.NRF_IRQ_GPIOx, &GPIO_InitStructure3);
@@ -150,8 +152,9 @@ nrf24l01_dev* NRF1_Init(uint8_t* addr_master,uint8_t* addr_slave, NRF_ADDR_WIDTH
 
 	NVIC_SetPriority(EXTI2_IRQn, 5);
 
+	//delay_nms(100);
+	//NRF_PowerUp(&NRF24L01_1, 0);
 	delay_nms(100);
-
 	NRF_PowerUp(&NRF24L01_1, 1);
 
 	NRF_SetTXPower(&NRF24L01_1, NRF24L01_1.TX_POWER);
@@ -533,8 +536,10 @@ NRF_RESULT NRF_PowerUp(nrf24l01_dev* dev, uint8_t powerUp) {
 
 	uint8_t config = 0;
 
-	while((config&2) == 0) {	// wait for powerup
-		NRF_ReadRegister(dev, NRF_CONFIG, &config);
+	if(powerUp){
+		while((config&2) == 0) {	// wait for powerup
+			NRF_ReadRegister(dev, NRF_CONFIG, &config);
+		}
 	}
 	return NRF_OK;
 }
