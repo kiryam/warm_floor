@@ -55,11 +55,13 @@ int Radio_Send(Radio* radio, uint8_t* data, size_t size) {
 		uint8_t retry_count = 10;
 		while(radio->instance->BUSY_FLAG == 1){
 			if(--retry_count == 0){
-				// reset NRF?
+				// reset NRF
+				NRF_PowerUp(radio->instance, 0);
+				Radio_Init(radio->instance);
 				LED_On(&core.led1);
 				return 1;
 			}
-			osDelay(10);
+			osDelay(100);
 		}
 
 	}

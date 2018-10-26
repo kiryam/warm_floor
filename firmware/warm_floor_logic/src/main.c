@@ -32,6 +32,7 @@ Core core;
 #define WATCHDOG_ENABLED
 #define INTERNAL_TEMP_SENSOR
 //#define SERIAL_DEBUG
+#define USE_DEBUG_BKP_REGISTER
 
 #ifdef SERIAL_DEBUG
 #ifdef INTERNAL_TEMP_SENSOR
@@ -78,6 +79,18 @@ void USART1_IRQHandler() {
 		core.usart1.RX_HANDLER((void*)&callback);
 	}
 }
+
+
+#ifdef USE_DEBUG_BKP_REGISTER
+	#define DEBUG_BKP_RESET_STATE 0
+	#define DEBUG_BKP_RESET_BECAUSE_OF_MAX_TEMP 1
+	void Debug_BKP_SET(uint16_t value) {
+		uint16_t val;
+		val = BKP_ReadBackupRegister(BKP_DR1);
+		val |= val;
+		BKP_WriteBackupRegister(BKP_DR1, val);
+	}
+#endif
 
 void Led1_Init(LED_dev* led){
 	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
@@ -178,6 +191,19 @@ void Fan1_Init(){
 	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
 	GPIO_Init(FAN_GPIO, &GPIO_InitStructure);
 }
+/*
+void Blink(){
+	LED_Off(led);
+		delay_nms(50);
+		LED_On(led);
+		delay_nms(50);
+		LED_Off(led);
+		delay_nms(50);
+		LED_On(led);
+		delay_nms(50);
+		LED_Off(led);
+	//Ledcore.led1
+}*/
 
 
 void Display1_Init(Display* display){
@@ -187,6 +213,16 @@ void Display1_Init(Display* display){
 void DS18B20_Init(){
 	if(ds18b20_init() == 0)  {
 		//ERROR NO SENSORS
+	}
+}
+
+// maximum 256 blinks
+void Blink_times(uint8_t n, uint32_t timeout){
+	for(int i =0; i<n; i++){
+		LED_On(&core.led1);
+		delay_nms(timeout);
+		LED_Off(&core.led1);
+		delay_nms(timeout);
 	}
 }
 
@@ -204,7 +240,21 @@ int main(int argc, char* argv[]) {
 	Switch6_Init(&core.switches[5]);
 
 	Led1_Init(&core.led1);
-	Fan1_On();
+
+#ifdef USE_DEBUG_BKP_REGISTER
+	 RCC_APB1PeriphClockCmd(RCC_APB1Periph_PWR | RCC_APB1Periph_BKP, ENABLE);
+	 RCC_BackupResetCmd(ENABLE);
+
+	 Blink_times(5, 30);
+	 delay_nms(1000);
+	 uint16_t reload_counter = BKP_ReadBackupRegister(BKP_DR1);
+	 Blink_times(reload_counter, 500);
+	 delay_nms(1000);
+	 Blink_times(10, 30);
+	 Debug_BKP_SET(DEBUG_BKP_RESET_STATE); // reset
+#endif
+
+	 Fan1_On();
 
 #ifdef INTERNAL_TEMP_SENSOR
 	DS18B20_Init();
@@ -213,12 +263,7 @@ int main(int argc, char* argv[]) {
 	delay_nms(1000);
 	core.temp1 = (int32_t)ds18b20_get_temp(0);
 
-	for(int i =0; i<(core.temp1/10); i++){
-		LED_On(&core.led1);
-		delay_nms(500);
-		LED_Off(&core.led1);
-		delay_nms(500);
-	}
+	Blink_times(core.temp1/10, 500);
 #endif
 
 
@@ -388,7 +433,7 @@ void SwitchStateTask(void const * argument){
 		core.tempActual.zone_3 = Thermometer_GetValue(&core.thermometers, 2);
 		core.tempActual.zone_4 = Thermometer_GetValue(&core.thermometers, 3);
 		core.tempActual.zone_5 = Thermometer_GetValue(&core.thermometers, 4);
-		core.tempActual.zone_6 = Thermometer_GetValue(&core.thermometers, 5);
+	//	core.tempActual.zone_6 = Thermometer_GetValue(&core.thermometers, 5);
 
 #ifdef INTERNAL_TEMP_SENSOR
 		core.temp1 = (int32_t)ds18b20_get_temp(0);
@@ -398,7 +443,11 @@ void SwitchStateTask(void const * argument){
 		//core.tempSet.temp = get_internal_temp(&core.thermometers);
 
 		if( core.temp1 > MAX_INSIDE_TEMP || core.temp2 > MAX_INSIDE_TEMP || core.tempActual.zone_2 > MAX_TEMP || core.tempActual.zone_3 > MAX_TEMP
-				|| core.tempActual.zone_4 > MAX_TEMP || core.tempActual.zone_5 > MAX_TEMP || core.tempActual.zone_6 > MAX_TEMP) {
+				|| core.tempActual.zone_4 > MAX_TEMP || core.tempActual.zone_5 > MAX_TEMP /* || core.tempActual.zone_6 > MAX_TEMP*/) {
+
+		#ifdef USE_DEBUG_BKP_REGISTER
+			Debug_BKP_SET(DEBUG_BKP_RESET_BECAUSE_OF_MAX_TEMP); // reset
+		#endif
 			NVIC_SystemReset();
 		}
 

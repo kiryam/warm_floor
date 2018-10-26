@@ -2,7 +2,7 @@
 
 #include "stdint.h"
 
-#define CACHE_SIZE 8
+#define CACHE_SIZE 32
 typedef struct __Thermometer {
 	uint16_t          adc_buffer[6];
 

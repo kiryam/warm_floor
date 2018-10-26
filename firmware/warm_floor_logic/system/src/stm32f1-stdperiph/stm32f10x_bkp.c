@@ -65,6 +65,7 @@
 #define TPIE_BitNumber    0x02
 #define CSR_TPIE_BB       (PERIPH_BB_BASE + (CSR_OFFSET * 32) + (TPIE_BitNumber * 4))
 
+
 /* Alias word address of TIF bit */
 #define TIF_BitNumber     0x09
 #define CSR_TIF_BB        (PERIPH_BB_BASE + (CSR_OFFSET * 32) + (TIF_BitNumber * 4))
