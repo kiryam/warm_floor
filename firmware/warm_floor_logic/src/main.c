@@ -27,6 +27,11 @@
 #pragma GCC diagnostic ignored "-Wmissing-declarations"
 #pragma GCC diagnostic ignored "-Wreturn-type"
 
+#define max(a,b) \
+   ({ __typeof__ (a) _a = (a); \
+       __typeof__ (b) _b = (b); \
+     _a > _b ? _a : _b; })
+
 Core core;
 
 #define WATCHDOG_ENABLED
@@ -48,6 +53,13 @@ Core core;
 #define MAX_INSIDE_TEMP 80
 #define FAN_ON_TEMP 50
 #define MAX_ZONES_AT_THE_MOMENT 5
+
+#define FAN_MIN_DEGREE 35 // minimal degree that fan should be set to FAN_MIN_VALUE eg. if degree < than FAN_MIN_DEGREE fan stays at FAN_STOP_VALUE
+#define FAN_MAX_DEGREE 60 // at that degree fan should be set to FAN_MAX_VALUE
+#define FAN_STOP_VALUE 200
+#define FAN_MIN_VALUE 200
+#define FAN_MAX_VALUE 1000
+
 
 #define RADION_MAX_PACKETS_IN_MESSAGE 10
 #define RADIO_BUFFER_SIZE RADION_MAX_PACKETS_IN_MESSAGE*NRF_PAYLOAD_LENGTH
@@ -174,11 +186,17 @@ void Serial1_Init(SERIAL_dev* usart){
 
 bool is_timer_started = false;
 void Fan1_On() {
-	TIM3->CCR1 = 1000;
+	TIM3->CCR1 = FAN_MAX_VALUE;
+}
+
+void Fan1_Set(uint8_t percent) {
+	if (percent > 100) {percent = 100;}
+
+	TIM3->CCR1 = FAN_MIN_VALUE+((FAN_MAX_VALUE-FAN_MIN_VALUE)/100)*percent;
 }
 
 void Fan1_Off(){
-	TIM3->CCR1 = 400;
+	TIM3->CCR1 = FAN_STOP_VALUE;
 }
 
 void Fan1_Init(){
@@ -197,7 +215,7 @@ void Fan1_Init(){
 	GPIO_Init(FAN_GPIO, &GPIO_InitStructure);
 
 	TIM_TimeBaseStructInit(&timer);
-	timer.TIM_Prescaler = 500;
+	timer.TIM_Prescaler = 2000;
 	timer.TIM_Period = 1000;
 	timer.TIM_ClockDivision = 0;
 	timer.TIM_CounterMode = TIM_CounterMode_Up;
@@ -462,7 +480,19 @@ void SwitchStateTask(void const * argument){
 		core.temp2 = (int32_t)ds18b20_get_temp(1);
 		ds18b20_start_convert();
 #endif
-		//core.tempSet.temp = get_internal_temp(&core.thermometers);
+
+#if configUSE_TIMERS == 0
+		// ((TEMP-FAN_MIN_DEGREE)*100/(FAN_MAX_DEGREE-FAN_MIN_DEGREE))
+		int8_t fan_value = ((max(core.temp1, core.temp2)-FAN_MIN_DEGREE)*100/(FAN_MAX_DEGREE-FAN_MIN_DEGREE));
+		if (fan_value > 0) {
+			Fan1_Set(fan_value);
+		} else {
+			Fan1_Set(0);
+		}
+#else
+		Fan1_On(); // always on
+#endif
+
 
 		if( core.temp1 > MAX_INSIDE_TEMP || core.temp2 > MAX_INSIDE_TEMP || core.tempActual.zone_2 > MAX_TEMP || core.tempActual.zone_3 > MAX_TEMP
 				|| core.tempActual.zone_4 > MAX_TEMP || core.tempActual.zone_5 > MAX_TEMP /* || core.tempActual.zone_6 > MAX_TEMP*/) {
@@ -484,7 +514,7 @@ void SwitchStateTask(void const * argument){
 		bool can_heat = true;
 #endif
 
-		if( core.temp1 >= FAN_ON_TEMP || core.temp2 >= FAN_ON_TEMP ) {
+	/*	if( core.temp1 >= FAN_ON_TEMP || core.temp2 >= FAN_ON_TEMP ) {
 #if configUSE_TIMERS == 1
 			if( xTimerIsTimerActive( fanTimer ) != pdFALSE ) {
 				 xTimerReset(fanTimer, ( TickType_t )1);
@@ -500,7 +530,7 @@ void SwitchStateTask(void const * argument){
 			Fan1_Off();
 #endif
 		}
-
+*/
 		zones_on=0;
 
 		if(core.tempSet.zone_1 > core.tempActual.zone_1 && core.tempActual.zone_1 > MIN_TEMP && can_heat && zones_on < MAX_ZONES_AT_THE_MOMENT ) {
