@@ -1,6 +1,6 @@
 #include "platform.h"
 #include "thermometer.h"
-#include "math.h"
+#include <math.h>
 
 #define MEASURE_DEGREE 250
 #define MIN_VALUE 0

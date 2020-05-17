@@ -1,0 +1,32 @@
+{
+    "configurations": [
+        {
+            "name": "warm_floor",
+            "includePath": [
+                "${workspaceFolder}/include",
+                "${workspaceFolder}/include/target/board1/",
+                "${workspaceFolder}/system/include",
+                "${workspaceFolder}/system/include/cmsis",
+                "${workspaceFolder}/system/include/stm32f1-stdperiph",
+                "${workspaceFolder}/src/drivers",
+                "${workspaceFolder}/libs",
+                "${workspaceFolder}/protobuf",
+                "${workspaceFolder}/Middlewares/Third_Party/FreeRTOS/Source/include",
+                "${workspaceFolder}/Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM3",
+                "${workspaceFolder}/Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS",
+                "${workspaceFolder}/protobuf"
+            ],
+            "defines": [
+                "STM32F10X",
+                "STM32F10X_LD_VL",
+                "USE_STDPERIPH_DRIVER"
+            ],
+            "macFrameworkPath": [],
+            "compilerPath": "/usr/local/bin/arm-none-eabi-gcc",
+            "cStandard": "c11",
+            "cppStandard": "c++11",
+            "intelliSenseMode": "gcc-x64"
+        }
+    ],
+    "version": 4
+}

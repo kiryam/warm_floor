@@ -21,6 +21,7 @@
 
 #include "cmsis_os.h"
 #include "timers.h"
+#include "queue.h"
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
