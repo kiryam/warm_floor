@@ -11,9 +11,10 @@
             "request": "launch",
             "type": "cortex-debug",
             "servertype": "jlink",
-            "device": "STM32F103CB",
-            "preLaunchTask": "",
+            "device": "STM32F103C8",
+            "preLaunchTask": "build",
             "runToMain": true,
+            "svdFile": "STM32F103.svd",
 
            // "serverArgs": ["-speed", "100"]
         }

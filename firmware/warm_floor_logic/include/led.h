@@ -11,3 +11,4 @@ typedef struct __LED_dev {
 void LED_Init(LED_dev* led);
 void LED_Off(LED_dev* led);
 void LED_On(LED_dev* led);
+void Blink_times(uint8_t n, uint32_t timeout);

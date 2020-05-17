@@ -41,3 +41,12 @@ typedef struct __SERIAL_dev {
 USART_StatusTypeDef Serial_Init(SERIAL_dev *husart);
 USART_StatusTypeDef Serial_Send_Str(SERIAL_dev *husart, char* str);
 USART_StatusTypeDef Serial_Send_Bytes(SERIAL_dev *husart, uint8_t* bytes, uint32_t len);
+
+#ifdef SERIAL_DEBUG
+#define DEBUG(u, s) Serial_Send_Str(u, s)
+#ifdef INTERNAL_TEMP_SENSOR
+# error "INTERNAL_TEMP_SENSOR must be undefined if SERIAL_DEBUG was enabled"
+#endif
+#else
+#define DEBUG(u, s)
+#endif

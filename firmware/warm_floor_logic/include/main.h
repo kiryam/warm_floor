@@ -8,7 +8,10 @@
 #include "thermometer.h"
 #include "floor.pb.h"
 
-
+// maximum seconds between temp set commands
+// if no temp set event between this interval happens - stop heating
+// in seconds
+#define MAX_TIME_SINCE_TEMP_SET 600
 typedef struct __CORE {
 	SERIAL_dev usart1;
 	LED_dev led1;
@@ -35,6 +38,15 @@ typedef struct __CORE {
 
 	int32_t temp1;
 	int32_t temp2;
+
+	// when last temp set command recived that counter updates
+	uint32_t lastTempSet;
 } Core;
 
 extern Core core;
+
+#define max(a,b) \
+   ({ __typeof__ (a) _a = (a); \
+       __typeof__ (b) _b = (b); \
+     _a > _b ? _a : _b; })
+

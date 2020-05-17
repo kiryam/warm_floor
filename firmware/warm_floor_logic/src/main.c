@@ -6,6 +6,7 @@
 #include "led.h"
 #include "switch.h"
 #include "serial.h"
+#include "fan.h"
 #ifdef DISPLAY
 #include "display.h"
 #endif
@@ -28,11 +29,6 @@
 #pragma GCC diagnostic ignored "-Wmissing-declarations"
 #pragma GCC diagnostic ignored "-Wreturn-type"
 
-#define max(a,b) \
-   ({ __typeof__ (a) _a = (a); \
-       __typeof__ (b) _b = (b); \
-     _a > _b ? _a : _b; })
-
 Core core;
 
 #define WATCHDOG_ENABLED
@@ -40,17 +36,6 @@ Core core;
 //#define SERIAL_DEBUG
 #define USE_DEBUG_BKP_REGISTER
 
-#ifdef SERIAL_DEBUG
-#define DEBUG(u, s) Serial_Send_Str(u, s)
-#ifdef INTERNAL_TEMP_SENSOR
-# error "INTERNAL_TEMP_SENSOR must be undefined if SERIAL_DEBUG was enabled"
-#endif
-#else
-#define DEBUG(u, s)
-#endif
-
-#define FAN_GPIO GPIOB
-#define FAN_PIN GPIO_Pin_4
 
 #define MIN_TEMP -30
 #define MAX_TEMP 80
@@ -58,20 +43,13 @@ Core core;
 #define FAN_ON_TEMP 50
 #define MAX_ZONES_AT_THE_MOMENT 5
 
-#define FAN_MIN_DEGREE 35 // minimal degree that fan should be set to FAN_MIN_VALUE eg. if degree < than FAN_MIN_DEGREE fan stays at FAN_STOP_VALUE
-#define FAN_MAX_DEGREE 60 // at that degree fan should be set to FAN_MAX_VALUE
-#define FAN_STOP_VALUE 200
-#define FAN_MIN_VALUE 200
-#define FAN_MAX_VALUE 1000
-
-
 #define RADION_MAX_PACKETS_IN_MESSAGE 10
 #define RADIO_BUFFER_SIZE RADION_MAX_PACKETS_IN_MESSAGE*NRF_PAYLOAD_LENGTH
 
 static uint8_t magic_sequence[DPROTO_MAGIC_SEC_LEN] = {4, 8, 15, 16};
 static uint8_t radio_buffer[RADIO_BUFFER_SIZE];
-uint8_t pb_buffer[1024];
-uint8_t zones_on;
+static uint8_t pb_buffer[1024];
+static uint8_t zones_on;
 
 #if configUSE_TIMERS == 1
 static TimerHandle_t fanTimer;
@@ -85,7 +63,6 @@ void MessageReadTask(void const * argument);
 void SwitchStateTask(void const * argument);
 void SendStateTask(void const * argument);
 
-
 void USART1_IRQHandler() {
 	if(USART_GetITStatus(USART1, USART_IT_RXNE) != RESET) {
 		USART_ClearITPendingBit(USART1, USART_IT_RXNE);
@@ -95,7 +72,6 @@ void USART1_IRQHandler() {
 		core.usart1.RX_HANDLER((void*)&callback);
 	}
 }
-
 
 #ifdef USE_DEBUG_BKP_REGISTER
 	#define DEBUG_BKP_RESET_STATE 0
@@ -189,55 +165,12 @@ void Serial1_Init(SERIAL_dev* usart){
 }
 
 bool is_timer_started = false;
-void Fan1_On() {
-	TIM3->CCR1 = FAN_MAX_VALUE;
-}
 
-void Fan1_Set(uint8_t percent) {
-	if (percent > 100) {percent = 100;}
-
-	TIM3->CCR1 = FAN_MIN_VALUE+((FAN_MAX_VALUE-FAN_MIN_VALUE)/100)*percent;
-}
-
-void Fan1_Off(){
-	TIM3->CCR1 = FAN_STOP_VALUE;
-}
-
-void Fan1_Init(){
-	TIM_TimeBaseInitTypeDef timer;
-	TIM_OCInitTypeDef timerPWM;
-	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM3, ENABLE);
-	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB | RCC_APB2Periph_AFIO, ENABLE);
-
-	GPIO_PinRemapConfig(GPIO_Remap_SWJ_NoJTRST, ENABLE);
-	GPIO_PinRemapConfig(GPIO_PartialRemap_TIM3, ENABLE);
-
-	GPIO_InitTypeDef GPIO_InitStructure;
-	GPIO_StructInit(&GPIO_InitStructure);
-	GPIO_InitStructure.GPIO_Pin = FAN_PIN;
-	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;//GPIO_Mode_Out_PP;//;
-	GPIO_Init(FAN_GPIO, &GPIO_InitStructure);
-
-	TIM_TimeBaseStructInit(&timer);
-	timer.TIM_Prescaler = 2000;
-	timer.TIM_Period = 1000;
-	timer.TIM_ClockDivision = 0;
-	timer.TIM_CounterMode = TIM_CounterMode_Up;
-	TIM_TimeBaseInit(TIM3, &timer);
-
-	TIM_OCStructInit(&timerPWM);
-	timerPWM.TIM_OCMode = TIM_OCMode_PWM1;
-	timerPWM.TIM_OutputState = TIM_OutputState_Enable;
-	timerPWM.TIM_Pulse = 1000;
-	timerPWM.TIM_OCPolarity = TIM_OCPolarity_High;
-	TIM_OC1Init(TIM3, &timerPWM);
-
-	TIM_Cmd(TIM3, ENABLE);
-}
-
+#ifdef DISPLAY
 void Display1_Init(Display* display){
 	Display_Init(display);
 }
+#endif
 
 void DS18B20_Init(){
 	if(ds18b20_init() == 0)  {
@@ -245,14 +178,26 @@ void DS18B20_Init(){
 	}
 }
 
-// maximum 256 blinks
-void Blink_times(uint8_t n, uint32_t timeout){
-	for(int i =0; i<n; i++){
-		LED_On(&core.led1);
-		delay_nms(timeout);
-		LED_Off(&core.led1);
-		delay_nms(timeout);
+unsigned char RTC_Init(void){
+	RCC_APB1PeriphClockCmd(RCC_APB1Periph_PWR | RCC_APB1Periph_BKP, ENABLE);
+	PWR_BackupAccessCmd(ENABLE);
+
+	if ((RCC->BDCR & RCC_BDCR_RTCEN) != RCC_BDCR_RTCEN) {
+		// Сброс данных в резервной области
+		RCC_BackupResetCmd(ENABLE);
+		RCC_BackupResetCmd(DISABLE);
+
+		RCC_LSICmd(ENABLE);
+		while((RCC->CSR & RCC_CSR_LSIRDY) == 0);
+
+		RCC_RTCCLKConfig(RCC_RTCCLKSource_LSI);
+		RTC_SetPrescaler(40000);
+
+		RCC_RTCCLKCmd(ENABLE);
+		RTC_WaitForSynchro();
+		return 1;
 	}
+	return 0;
 }
 
 int main(int argc, char* argv[]) {
@@ -302,6 +247,8 @@ int main(int argc, char* argv[]) {
 	IWDG_ReloadCounter();
 	IWDG_Enable();
 	#endif
+
+	RTC_Init();
 
 	#ifdef SERIAL_DEBUG
 	USART_HandleTypeDef usart_usart;
@@ -363,18 +310,13 @@ static void fanTimerCallback( TimerHandle_t xExpiredTimer ) {
 #endif
 
 void MessageReadTask(void const * argument){
-	#ifdef SERIAL_DEBUG
-		Serial_Send_Str(&core.usart1, "MessageReadTask started\r\n");
-	#endif
-
+	DEBUG(&core.usart1, "MessageReadTask started\r\n");
 	uint32_t buffer_pos = 0;
 	uint32_t length=0;
 	uint8_t data=0;
 	for(;;){
 		if( xQueueReceive( (xQueueHandle)core.radio_queue, &( data ), ( TickType_t ) 100 ) ) {
-			#ifdef SERIAL_DEBUG
-				Serial_Send_Str(&core.usart1, "Reading message from radio_queue\r\n");
-			#endif
+			DEBUG(&core.usart1, "Reading message from radio_queue\r\n");
 			if( buffer_pos >= RADIO_BUFFER_SIZE ) {
 				buffer_pos=0;
 				length = 0;
@@ -396,6 +338,7 @@ void MessageReadTask(void const * argument){
 				length = 0;
 
 				pb_decode(&stream, TempSet_fields, &core.tempSet);
+				core.lastTempSet = RTC_GetCounter();
 				LED_On(&core.led1);
 				osDelay(100);
 				LED_Off(&core.led1);
@@ -443,7 +386,6 @@ void SwitchStateTask(void const * argument){
 		#endif
 
 		#if configUSE_TIMERS == 0
-		// ((TEMP-FAN_MIN_DEGREE)*100/(FAN_MAX_DEGREE-FAN_MIN_DEGREE))
 		int8_t fan_value = ((max(core.temp1, core.temp2)-FAN_MIN_DEGREE)*100/(FAN_MAX_DEGREE-FAN_MIN_DEGREE));
 		if (fan_value > 0) {
 			Fan1_Set(fan_value);
@@ -457,17 +399,17 @@ void SwitchStateTask(void const * argument){
 		if( core.temp1 > MAX_INSIDE_TEMP || core.temp2 > MAX_INSIDE_TEMP || core.tempActual.zone_2 > MAX_TEMP || core.tempActual.zone_3 > MAX_TEMP
 				|| core.tempActual.zone_4 > MAX_TEMP || core.tempActual.zone_5 > MAX_TEMP /* || core.tempActual.zone_6 > MAX_TEMP*/) {
 
-		#ifdef USE_DEBUG_BKP_REGISTER
-		Debug_BKP_SET(DEBUG_BKP_RESET_BECAUSE_OF_MAX_TEMP); // reset
-		#endif
-		NVIC_SystemReset();
+			#ifdef USE_DEBUG_BKP_REGISTER
+			Debug_BKP_SET(DEBUG_BKP_RESET_BECAUSE_OF_MAX_TEMP); // reset
+			#endif
+			NVIC_SystemReset();
 		}
 
 		#ifdef INTERNAL_TEMP_SENSOR
 		bool can_heat = false;
-		if ( (core.temp1 > -40 && core.temp1 < 60) &&
-			(core.temp2 > -40 && core.temp2 < 60)
-				&& abs(core.temp1 - core.temp2) < 20 ) { // check inside temp
+
+		int32_t lastTempDiff = RTC_GetCounter()-core.lastTempSet;
+		if ( (core.temp1 > -40 && core.temp1 < 60) && (core.temp2 > -40 && core.temp2 < 60) && abs(core.temp1 - core.temp2) < 20 && lastTempDiff < MAX_TIME_SINCE_TEMP_SET ) { // check inside temp
 			can_heat = true;
 		}
 		#else
@@ -546,15 +488,9 @@ void SendStateTask(void const * argument){
 	}
 }
 
-/**
-  * @brief  This function is executed in case of error occurrence.
-  * @param  None
-  * @retval None
-  */
 void _Error_Handler(char * file, int line){
 	DEBUG(&core.usart1, "_Error_Handler\r\n");
 	while(1){}
 }
-
 
 #pragma GCC diagnostic pop
